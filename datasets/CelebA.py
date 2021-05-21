@@ -13,10 +13,12 @@ class CelebA(Dataset):
     Test data number: 0
 
     """
-    def __init__(self, dataroot, transform=None, train=True):
+    def __init__(self, dataroot, n_data=None, transform=None, train=True):
         # Initial parameters
         self.dataroot = os.path.join(dataroot, "CelebA")
         self.train = train
+        if n_data:
+            self.n_data = n_data
         if transform: # Set default transforms if no transformation provided.
             self.transform = transform
         else:
@@ -35,7 +37,10 @@ class CelebA(Dataset):
         
         # Split file and image path list.
         if self.train:
-            self.img_paths = glob.glob(os.path.join(self.dataroot, 'data', '*.jpg'))
+            if n_data:
+                self.img_paths = glob.glob(os.path.join(self.dataroot, 'data', '*.jpg'))[:n_data]
+            else:
+                self.img_paths = glob.glob(os.path.join(self.dataroot, 'data', '*.jpg'))
             self.targets = [0] * len(self.img_paths)
         else:
             self.img_paths = []
@@ -64,5 +69,7 @@ class CelebA(Dataset):
 if __name__ == '__main__':
     data = CelebA(os.environ["DATAROOT"])
     print(data)
+    sample = CelebA(os.environ["DATAROOT"], n_data=100)
+    print(sample)
     testdata = CelebA(os.environ["DATAROOT"], train=False)
     print(testdata)
