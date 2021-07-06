@@ -30,19 +30,14 @@ class Caltech256(Dataset):
             ])
         
         # Metadata of dataset
-        classes = [i.split('/')[-1] for i in glob.glob(os.path.join(self.dataroot, 'data', '*'))]
+        classes = [i.split('/')[-1] for i in glob.glob(os.path.join(self.dataroot, 'train' if train else 'test', '*'))]
         self.class_num = len(classes)
         self.classes = [i.split('.')[1] for i in classes]
         self.class_to_idx = {i.split('.')[1]: int(i.split('.')[0])-1 for i in classes}
         self.idx_to_class = {int(i.split('.')[0])-1: i.split('.')[1] for i in classes}
-        
-        # Split file and image path list.
-        self.split_file = os.path.join(self.dataroot, 'trainset.txt') if train else os.path.join(self.dataroot, 'testset.txt')
-        with open(self.split_file, 'r') as f:
-            self.img_paths = f.readlines()
-            self.img_paths = [i.strip() for i in self.img_paths]
-        self.targets = [self.class_to_idx[i.split('/')[1].split('.')[1]] for i in self.img_paths]
-        self.img_paths = [os.path.join(self.dataroot, i) for i in self.img_paths]
+
+        self.img_paths = glob.glob(os.path.join(self.dataroot, 'train' if train else 'test', '*', '*'))
+        self.targets = [self.class_to_idx[p.split('/')[-2].split('.')[1]] for p in self.img_paths]
 
     def __len__(self):
         return len(self.img_paths)
