@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 import torchvision.transforms as T
 from PIL import Image
 from torch.utils.data import Dataset
@@ -40,29 +41,42 @@ class ImageNet(Dataset):
         # Metadata of dataset
         self.classes = self.data.classes
         self.class_num = len(self.data.classes)
-        self.class_to_idx = self.data.class_to_idx
-        self.idx_to_class = {self.class_to_idx[c]:c for c in self.class_to_idx}
+        self.idx_to_class = {i:self.data.classes[i][0] for i in range(self.class_num)}
+        self.class_to_idx = {}
+        for i in self.idx_to_class:
+            classname = self.idx_to_class[i]
+            while classname in self.class_to_idx:
+                classname += '_'
+            self.class_to_idx[classname] = i
         
         # Subset process.
-        self.class_subset = list(range(subset))
-        self.class_count = {i: 0 for i in self.class_subset}
-        self.subset_indices = []
-        self.targets = []
-        self.img_paths = []
+        if isinstance(subset, int):
+            self.class_subset = list(range(subset))
+        else:
+            self.class_subset = list(subset)
 
-        for i, target in enumerate(self.data.targets):
-            if target not in self.class_subset:
-                break
-            if self.class_count[target] >= self.max_n_per_class:
-                continue
-            else:
-                self.class_count[target] += 1
-                self.subset_indices.append(i)
-                self.targets.append(target)
-                self.img_paths.append(self.data.imgs[i][0])
+        self.mapping = {i: self.class_subset[i] for i in range(len(self.class_subset))}
+        self._rev_mapping = {self.mapping[i]: i for i in self.mapping}
+        self._rev_mapping = np.array([self._rev_mapping[i] if i in self.class_subset else -1 for i in range(1000)])
+        target_mapping = lambda x: self._rev_mapping[x]
 
+        self.subset_mask = np.array(self.data.targets)
+        for i in self.class_subset:
+            self.subset_mask[np.where(self.subset_mask == i)[0][self.max_n_per_class:]] = -1
+        self.subset_indices = np.where(self.subset_mask != -1)[0]
+        self.class_selection = np.where(np.in1d(np.array(self.data.targets), np.array(self.class_subset)) == 1)[0]
+        self.subset_indices = np.intersect1d(self.subset_indices, self.class_selection)
+
+        # Data and targets
+        self.targets = list(target_mapping(np.array(self.data.targets)[self.subset_indices]))
+        self.img_paths = list(np.array(self.data.imgs)[self.subset_indices][:, 0])
+
+        # Metadata override.
         self.classes = [self.classes[i] for i in self.class_subset]
-        self.class_num = len(self.class_subset)
+        self.class_num = len(self.classes)
+        self.idx_to_class = {i: self.idx_to_class[i] for i in self.class_subset}
+        self.class_to_idx = {self.idx_to_class[i]: i for i in self.idx_to_class}
+
 
     def __len__(self):
         return len(self.img_paths)
@@ -91,5 +105,10 @@ if __name__ == '__main__':
     testdata = ImageNet(os.environ["DATAROOT"], train=False)
     print(testdata)
     # When using subset of ImageNet dataset, you should set `subset` and `max_n_per_class`.
-    subsetdata = ImageNet(os.environ["DATAROOT"], train=True, subset=50, max_n_per_class=100)
-    print(subsetdata)
+    # Get first N classes
+    subsetdata_topclass = ImageNet(os.environ["DATAROOT"], train=True, subset=50, max_n_per_class=100)
+    print(subsetdata_topclass)
+    # Get specific classes
+    subsetdata_speclass = ImageNet(os.environ["DATAROOT"], train=True, subset=[151, 281, 30, 33, 80, 365, 389, 118, 300], max_n_per_class=100)
+    print(subsetdata_speclass)
+
