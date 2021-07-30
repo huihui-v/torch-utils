@@ -21,7 +21,7 @@ def main():
         'std': [0.229, 0.224, 0.225]
     }
     lr = 1e-1
-    epochs = 120
+    epochs = 200
 
     # transform = common_train((224, 224))
     trainset = ImageNet(os.environ['DATAROOT'], transform=common_train((224, 224)), train=True, subset=50)
@@ -35,6 +35,7 @@ def main():
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4, nesterov=True)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs, 1e-4, -1)
+    # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60, 90], gamma=0.1, last_epoch=-1)
 
     runner = Runner(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, 10)
     
@@ -42,4 +43,5 @@ def main():
     runner.train()
 
 if __name__ == '__main__':
+    # CUDA_VISIBLE_DEVICES=0,1 python run-classification.py
     main()
