@@ -6,13 +6,14 @@ from .meter import AverageMeter
 
 class Runner():
     def __init__(self, model, train_loader, test_loader, criterion, optimizer, scheduler=None, \
-                 epochs=120, eval_interval=10):
+                 scaler=None, epochs=120, eval_interval=10):
         self.model = model
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.criterion = criterion
         self.optimizer = optimizer
         self.scheduler = scheduler
+        self.scaler = scaler
         self.epochs = epochs
         self.eval_interval = eval_interval
         self.desc = lambda status, progress: f"{status}: {progress}"
@@ -26,15 +27,23 @@ class Runner():
         for batch_idx, batch in enumerate(self.train_loader):
             data, target = batch
             data, target = data.to(self.device), target.to(self.device)
-            output = self.model(data)
-            # loss = nn.functional.cross_entropy(output, target)
-            loss = self.criterion(output, target)
+            with torch.cuda.amp.autocast():
+                output = self.model(data)
+                # loss = nn.functional.cross_entropy(output, target)
+                loss = self.criterion(output, target)
             pbar.set_postfix_str("Loss {:.4f}".format(loss.item()))
             loss_meter.update(loss.item())
 
             self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+            if self.scaler is not None:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
+            # loss.backward()
+            # self.optimizer.step()
 
             pbar.update(1)
         pbar.close()
@@ -49,8 +58,9 @@ class Runner():
             pbar = tqdm(total=len(self.test_loader), leave=False, desc=self.desc("Eval", progress))
             for batch_idx, (data, target) in enumerate(self.test_loader):
                 data, target = data.to(self.device), target.to(self.device)
-                output = self.model(data)
-                loss = self.criterion(output, target)
+                with torch.cuda.amp.autocast():
+                    output = self.model(data)
+                    loss = self.criterion(output, target)
                 loss_meter.update(loss.item())
                 pred = output.argmax(dim=1)
 
@@ -142,8 +152,9 @@ class DistRunner():
             pbar = tqdm(total=len(self.test_loader), leave=False, desc=self.desc("Eval", progress))
             for batch_idx, (data, target) in enumerate(self.test_loader):
                 data, target = data.to(self.device), target.to(self.device)
-                output = self.model(data)
-                loss = self.criterion(output, target)
+                with torch.cuda.amp.autocast():
+                    output = self.model(data)
+                    loss = self.criterion(output, target)
                 loss_meter.update(loss.item())
                 pred = output.argmax(dim=1)
 
@@ -179,4 +190,4 @@ class DistRunner():
                 if torch.distributed.get_rank() == 0:
                     tqdm.write("Evaluation {}/{}, Loss avg. {:.4f}, Acc. {:.4f}".format(epoch_idx, self.epochs, avg_loss, avg_acc))
 
-        tqdm.write("Finish training!")
+        tqdm.write("Finish training on rank {}!".format(torch.distributed.get_rank()))

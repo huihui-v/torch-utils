@@ -22,6 +22,7 @@ def main():
     }
     lr = 1e-1
     epochs = 200
+    scaler = torch.cuda.amp.GradScaler()
 
     # transform = common_train((224, 224))
     trainset = ImageNet(os.environ['DATAROOT'], transform=common_train((224, 224)), train=True, subset=50)
@@ -37,7 +38,7 @@ def main():
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs, 1e-4, -1)
     # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60, 90], gamma=0.1, last_epoch=-1)
 
-    runner = Runner(model, train_loader, test_loader, criterion, optimizer, scheduler, epochs, 10)
+    runner = Runner(model, train_loader, test_loader, criterion, optimizer, scheduler, scaler, epochs, 10)
     
     tqdm.write("Start training with Resnet18.")
     runner.train()

@@ -30,7 +30,7 @@ def main():
     device = f'cuda:{device_id}'
     scaler = torch.cuda.amp.GradScaler()
 
-    batch_size = 256
+    batch_size = 128
     normalize = {
         'mean': [0.485, 0.456, 0.406],
         'std': [0.229, 0.224, 0.225]
