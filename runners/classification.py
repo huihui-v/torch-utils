@@ -108,9 +108,16 @@ class DistRunner():
         self.device = next(self.model.parameters()).device
 
     def collect(self, x, mode='mean'):
+        # Collect variables.
+        # If mode == 'mean', you'll get the average value among all the devices,
+        # else, you'll get the sum of variables among all the devices.
+        #
+        # Usage:
+        #     t = 1
+        #     t_collect = self.collect(t)
+        # then you'll get t_collect == n, where n is the world size.
         xt = torch.tensor([x]).to(self.device)
         torch.distributed.all_reduce(xt, op=torch.distributed.ReduceOp.SUM)
-        # print(xt.item())
         xt = xt.item()
         if mode == 'mean':
             xt /= torch.distributed.get_world_size()
@@ -123,15 +130,16 @@ class DistRunner():
         for batch_idx, batch in enumerate(self.train_loader):
             data, target = batch
             data, target = data.to(self.device), target.to(self.device)
+            # Automatic mixed precision
             with torch.cuda.amp.autocast():
                 output = self.model(data)
-                # loss = nn.functional.cross_entropy(output, target)
                 loss = self.criterion(output, target)
             pbar.set_postfix_str("Loss {:.4f}".format(loss.item()))
             loss_meter.update(loss.item())
 
             self.optimizer.zero_grad()
             if self.scaler is not None:
+                # Automatic mixed precision
                 self.scaler.scale(loss).backward()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
@@ -169,8 +177,11 @@ class DistRunner():
 
     def train(self):
         (avg_loss, acc_sum, acc_count) = self.evaluate("Init")
+        # Collect the avg_loss and avg_acc among different devices.
         avg_loss = self.collect(avg_loss)
         avg_acc = self.collect(acc_sum, mode='sum') / self.collect(acc_count, mode='sum')
+        # Only print the evaluation result on the main device(rank == 0).
+        # If not, each of the process will print the evaluation result, and it will make the terminal ugly!
         if torch.distributed.get_rank() == 0:
             tqdm.write("Evaluation init, Loss avg. {:.4f}, Acc. {:.4f}".format(avg_loss, avg_acc))
 

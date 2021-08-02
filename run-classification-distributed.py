@@ -20,14 +20,16 @@ def get_device_id():
     return args.local_rank
 
 def main():
+    # Distributed setting.
     torch.distributed.init_process_group(
         backend='nccl',
-        # init_method=f'file://{os.environ["TMPDIR"]}/Simclr'
         init_method='env://'
     )
     device_id = get_device_id()
     torch.cuda.set_device(device_id)
     device = f'cuda:{device_id}'
+
+    # Automatic mixed precision.
     scaler = torch.cuda.amp.GradScaler()
 
     batch_size = 128
@@ -38,9 +40,9 @@ def main():
     lr = 1e-1
     epochs = 200
 
-    # transform = common_train((224, 224))
     trainset = ImageNet(os.environ['DATAROOT'], transform=common_train((224, 224)), train=True, subset=50)
     testset = ImageNet(os.environ['DATAROOT'], transform=common_test((224, 224)), train=False, subset=50)
+    # Use distributed sampler to map data parts to different CUDA devices.
     trainsampler = torch.utils.data.distributed.DistributedSampler(trainset)
     testsampler = torch.utils.data.distributed.DistributedSampler(testset)
     train_loader = DataLoader(trainset, batch_size=batch_size, sampler=trainsampler, pin_memory=False, num_workers=12)
@@ -48,13 +50,15 @@ def main():
 
 
     model = resnet18(**normalize, class_num=50).to(device)
+    # Distributed: convert the BN layers of the model into sync-BN layers.
     model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    # Distributed: create DDP model.
     model = nn.parallel.DistributedDataParallel(model, device_ids=[device_id], output_device=device_id)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4, nesterov=True)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs, 1e-4, -1)
-    # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60, 90], gamma=0.1, last_epoch=-1)
-
+    
+    # Use DistRunner to run DDP train and evaluation.
     runner = DistRunner(model, train_loader, test_loader, criterion, optimizer, scheduler, scaler, epochs, 10)
     
     tqdm.write("Start training with Resnet18.")
