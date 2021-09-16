@@ -33,7 +33,7 @@ class TinyIN(Dataset):
         else:
             with open(os.path.join(self.dataroot, "val", "val_annotations.txt"), "r") as f:
                 datapairs = f.readlines()
-            self.img_paths = [c.split('\t')[0] for c in datapairs]
+            self.img_paths = [os.path.join(self.dataroot, "val", "images", c.split('\t')[0]) for c in datapairs]
             self.targets = [c.split('\t')[1] for c in datapairs]
             self.targets = [self.class_to_idx[t] for t in self.targets]
 
@@ -46,7 +46,7 @@ class TinyIN(Dataset):
         # idx_in_ori_data = self.subset_indices[idx]
         # return self.data.__getitem__(idx_in_ori_data)
         img_path = self.img_paths[idx]
-        img = Image.open(img_path)
+        img = Image.open(img_path).convert("RGB")
         img_tensor = self.transform(img)
         target = self.targets[idx]
 
